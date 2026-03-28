@@ -1,0 +1,954 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>GB Debug</title>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      :root {
+        --gold: #c0a060;
+        --bg: #111;
+        --panel: #1a1a1a;
+        --border: #333;
+      }
+
+      body {
+        background: var(--bg);
+        color: #ccc;
+        font:
+          12px/1.4 'Courier New',
+          monospace;
+      }
+
+      button,
+      select,
+      input[type='text'] {
+        background: #222;
+        color: #ccc;
+        border: 1px solid var(--gold);
+        font: inherit;
+        padding: 3px 8px;
+        cursor: pointer;
+      }
+      button:hover {
+        background: #333;
+      }
+      button:active {
+        background: var(--gold);
+        color: #000;
+      }
+
+      /* Layout */
+      #app {
+        display: grid;
+        grid-template-columns: 500px 1fr;
+        grid-template-rows: auto 1fr;
+        height: 100vh;
+      }
+
+      header {
+        grid-column: 1 / -1;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 6px 10px;
+        background: #0a0a0a;
+        border-bottom: 1px solid var(--gold);
+        flex-wrap: wrap;
+      }
+
+      #rom-name {
+        color: #6f6;
+      }
+
+      /* Left column: Screen */
+      #col-left {
+        background: var(--panel);
+        border-right: 1px solid var(--gold);
+        overflow-y: auto;
+        padding: 8px;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+
+      #screen {
+        width: 480px;
+        height: 432px;
+        image-rendering: pixelated;
+        background: #000;
+        border: 1px solid var(--border);
+      }
+
+      #playback {
+        display: flex;
+        gap: 6px;
+        align-items: center;
+        flex-wrap: wrap;
+      }
+
+      #frame-info {
+        color: #888;
+        font-size: 11px;
+        margin-left: auto;
+      }
+
+      #panel-tiles canvas {
+        image-rendering: pixelated;
+        background: #000;
+        border: 1px solid var(--border);
+        display: block;
+        height: 256px;
+        width: auto;
+      }
+      .vram-sections {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        align-items: flex-start;
+        overflow-x: auto;
+      }
+      .vram-section {
+        flex: 0 0 auto;
+      }
+      #tile-bank-select {
+        display: flex;
+        gap: 4px;
+        margin-bottom: 4px;
+      }
+      #tile-bank-select button {
+        padding: 2px 8px;
+        font-size: 10px;
+        letter-spacing: 1px;
+      }
+      #tile-bank-select button.active-bank {
+        background: var(--gold);
+        color: #000;
+        border-color: var(--gold);
+      }
+
+      /* Right column: 2-column grid of panels */
+      #col-right {
+        overflow-y: auto;
+        padding: 8px;
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 6px;
+        align-content: start;
+      }
+
+      /* Full-width panel spanning both columns */
+      .panel-full {
+        grid-column: 1 / -1;
+      }
+
+      /* Sub-column: stacks panels vertically */
+      .panel-group {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        min-width: 0;
+      }
+
+      .panel {
+        background: var(--panel);
+        border: 1px solid var(--border);
+      }
+
+      .panel-head {
+        background: #222;
+        color: var(--gold);
+        padding: 4px 8px;
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        border-bottom: 1px solid var(--border);
+        cursor: pointer;
+        display: flex;
+        justify-content: space-between;
+      }
+      .panel-head::after {
+        content: '[-]';
+        opacity: 0.5;
+      }
+      .panel.shut .panel-head::after {
+        content: '[+]';
+      }
+      .panel.shut .panel-body {
+        display: none;
+      }
+
+      .panel-body {
+        flex: 1 1 auto;
+        padding: 6px 8px;
+        overflow-y: auto;
+        max-height: none;
+      }
+
+      .panel-body pre {
+        margin: 0;
+        font: inherit;
+        white-space: pre;
+      }
+
+      /* Panels with more content get taller max-height */
+      #panel-disasm .panel-body,
+      #panel-memory .panel-body,
+      #panel-tiles .panel-body {
+        flex: 1 1 auto;
+      }
+
+      #panel-controls .panel-body,
+      #panel-cpu .panel-body,
+      #panel-ppu .panel-body {
+        max-height: none;
+        overflow: visible;
+      }
+
+      /* Register tables */
+      .reg-tbl {
+        display: grid;
+        grid-template-columns: repeat(4, auto 1fr);
+        border: 1px solid var(--border);
+      }
+      .reg-tbl .row {
+        display: contents;
+      }
+      .reg-tbl .row:nth-child(odd) span {
+        background: #1f1f1f;
+      }
+      .reg-tbl span {
+        padding: 3px 8px;
+        border: 1px solid var(--border);
+        margin: -1px 0 0 -1px;
+      }
+      .reg-tbl .lbl {
+        color: #888;
+        text-align: right;
+        white-space: nowrap;
+      }
+      .reg-tbl .val {
+        color: var(--gold);
+        text-align: left;
+        font-family: 'Courier New', monospace;
+      }
+
+      /* Disasm */
+      #disasm-pre {
+        max-height: 280px;
+        overflow-y: auto;
+      }
+      #disasm-pre .pc {
+        background: #335;
+        color: #fff;
+        display: block;
+      }
+
+      /* Memory - larger */
+      #mem-nav {
+        display: flex;
+        gap: 4px;
+        margin-bottom: 6px;
+        align-items: center;
+      }
+      #mem-addr-input {
+        width: 6ch;
+        text-align: center;
+      }
+      #mem-pre {
+        font-size: 11px;
+        max-height: 320px;
+        overflow: auto;
+        line-height: 1.5;
+      }
+
+      /* IO */
+      .sub {
+        color: var(--gold);
+        font-size: 10px;
+        margin: 8px 0 4px;
+        border-bottom: 1px solid var(--border);
+      }
+      .sub:first-child {
+        margin-top: 0;
+      }
+
+      #serial-output {
+        max-height: 50px;
+        overflow-y: auto;
+        color: #a80;
+      }
+
+      /* Camera */
+      #panel-camera {
+        display: none;
+      }
+
+      /* Motion (MBC7) */
+      #panel-motion {
+        display: none;
+      }
+      #motion-status {
+        font-size: 11px;
+        color: #888;
+        margin-bottom: 6px;
+      }
+      #tilt-indicator {
+        width: 80px;
+        height: 80px;
+        border: 1px solid var(--border);
+        border-radius: 50%;
+        position: relative;
+        margin: 6px 0;
+        background: #0a0a0a;
+      }
+      #tilt-dot {
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        background: var(--gold);
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        transition:
+          top 0.05s,
+          left 0.05s;
+      }
+      #camera-settings {
+        font-size: 11px;
+        color: #888;
+        margin-bottom: 6px;
+        font-family: var(--mono);
+      }
+      .cam-row {
+        display: flex;
+        gap: 10px;
+        margin-bottom: 8px;
+      }
+      .cam-row > div {
+        flex: 1;
+      }
+      .cam-row small {
+        color: #888;
+        font-size: 10px;
+      }
+      .cam-row canvas {
+        width: 100%;
+        aspect-ratio: 128/112;
+        image-rendering: pixelated;
+        background: #000;
+        border: 1px solid var(--border);
+      }
+      #gallery-grid {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 4px;
+      }
+      .gallery-slot {
+        font-size: 10px;
+        color: #888;
+        text-align: center;
+      }
+      .gallery-slot canvas {
+        width: 64px;
+        height: 56px;
+        image-rendering: pixelated;
+        background: #000;
+      }
+
+      /* Gamepad */
+      #gamepad {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 4px 0;
+        user-select: none;
+        -webkit-user-select: none;
+        touch-action: manipulation;
+        max-width: 400px;
+        margin: 0 auto;
+      }
+      .gp-dpad {
+        display: grid;
+        grid-template-columns: repeat(3, 44px);
+        grid-template-rows: repeat(3, 44px);
+        gap: 2px;
+      }
+      .gp-dpad .gp-btn:nth-child(1) {
+        grid-area: 1 / 2;
+      }
+      .gp-dpad .gp-btn:nth-child(2) {
+        grid-area: 2 / 1;
+      }
+      .gp-dpad .gp-btn:nth-child(3) {
+        grid-area: 3 / 2;
+      }
+      .gp-dpad .gp-btn:nth-child(4) {
+        grid-area: 2 / 3;
+      }
+      .gp-meta {
+        display: flex;
+        gap: 8px;
+        align-self: flex-end;
+      }
+      .gp-ab {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+      }
+      .gp-btn {
+        background: #222;
+        border: 2px solid var(--gold);
+        color: var(--gold);
+        font:
+          bold 14px/1 'Courier New',
+          monospace;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: background 0.05s;
+      }
+      .gp-btn:active,
+      .gp-btn.pressed {
+        background: var(--gold);
+        color: #000;
+      }
+      .gp-dpad .gp-btn {
+        width: 44px;
+        height: 44px;
+      }
+      .gp-round {
+        width: 52px;
+        height: 52px;
+        border-radius: 50%;
+      }
+      .gp-small {
+        width: 44px;
+        height: 28px;
+        font-size: 11px;
+      }
+
+      /* ── APU panel (LSDJ-style) ────────────────────────────── */
+      #panel-apu .panel-body {
+        padding: 0;
+      }
+
+      #apu-status-bar {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        align-items: center;
+        padding: 4px 8px;
+        font-size: 10px;
+        background: #0d0d0d;
+        border-bottom: 1px solid var(--border);
+        color: #555;
+      }
+      #apu-status-bar .av {
+        color: var(--gold);
+      }
+      #apu-pwr {
+        font-size: 11px;
+      }
+      #apu-pwr.on {
+        color: #6f6;
+      }
+      #apu-pwr.off {
+        color: #383838;
+      }
+
+      #apu-channels {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+      }
+      .apu-ch {
+        border-right: 1px solid #1c1c1c;
+        display: flex;
+        flex-direction: column;
+      }
+      .apu-ch:last-child {
+        border-right: none;
+      }
+
+      .apu-ch-head {
+        text-align: center;
+        font-size: 10px;
+        letter-spacing: 3px;
+        padding: 3px 2px;
+        font-weight: bold;
+        border-bottom: 1px solid #1c1c1c;
+      }
+      .apu-ch.c1 .apu-ch-head {
+        background: #0a1a0a;
+        color: #6f6;
+      }
+      .apu-ch.c2 .apu-ch-head {
+        background: #08101e;
+        color: #6af;
+      }
+      .apu-ch.c3 .apu-ch-head {
+        background: #1a1000;
+        color: #fa0;
+      }
+      .apu-ch.c4 .apu-ch-head {
+        background: #120a1e;
+        color: #c9f;
+      }
+
+      .apu-scope {
+        display: block;
+        width: 100%;
+        height: 48px;
+        image-rendering: auto;
+        border-bottom: 1px solid #1c1c1c;
+        background: #060606;
+      }
+
+      .apu-ch-note {
+        font-size: 17px;
+        font-weight: bold;
+        text-align: center;
+        padding: 5px 4px 4px;
+        letter-spacing: 3px;
+        line-height: 1;
+        border-bottom: 1px solid #1c1c1c;
+      }
+      .apu-ch.c1 .apu-ch-note {
+        color: #6f6;
+      }
+      .apu-ch.c2 .apu-ch-note {
+        color: #6af;
+      }
+      .apu-ch.c3 .apu-ch-note {
+        color: #fa0;
+      }
+      .apu-ch.c4 .apu-ch-note {
+        color: #c9f;
+      }
+      .apu-ch-note.dim {
+        color: #2a2a2a;
+      }
+
+      .apu-ch-rows {
+        padding: 3px 5px 5px;
+      }
+      .apu-row {
+        display: flex;
+        justify-content: space-between;
+        font-size: 10px;
+        line-height: 1.75;
+        gap: 4px;
+      }
+      .apu-row .k {
+        color: #444;
+      }
+      .apu-ch.c1 .apu-row .v {
+        color: #4d8;
+      }
+      .apu-ch.c2 .apu-row .v {
+        color: #48b;
+      }
+      .apu-ch.c3 .apu-row .v {
+        color: #a70;
+      }
+      .apu-ch.c4 .apu-row .v {
+        color: #98c;
+      }
+      .apu-row .v.dim {
+        color: #333;
+      }
+
+      /* Mobile */
+      @media (max-width: 900px) {
+        #app {
+          display: block;
+          height: auto;
+        }
+        #col-right {
+          grid-template-columns: 1fr;
+        }
+        #col-left {
+          border-right: none;
+          border-bottom: 1px solid var(--gold);
+        }
+        #col-left,
+        #col-right {
+          padding: 2vw;
+        }
+        #screen {
+          width: 100%;
+          height: auto;
+          aspect-ratio: 160/144;
+        }
+        #playback {
+          justify-content: center;
+        }
+        #frame-info {
+          margin-left: 0;
+          width: 100%;
+          text-align: center;
+        }
+        #gamepad {
+          padding: 2vw 0;
+        }
+        .gp-dpad {
+          --btn-size: min(12vw, 54px);
+          grid-template-columns: repeat(3, var(--btn-size));
+          grid-template-rows: repeat(3, var(--btn-size));
+          gap: 0.5vw;
+        }
+        .gp-dpad .gp-btn {
+          width: var(--btn-size);
+          height: var(--btn-size);
+        }
+        .gp-round {
+          --round-size: min(14vw, 64px);
+          width: var(--round-size);
+          height: var(--round-size);
+          font-size: min(4vw, 18px);
+        }
+        .gp-small {
+          width: min(11vw, 50px);
+          height: min(7vw, 32px);
+          font-size: min(2.5vw, 11px);
+        }
+        .gp-meta {
+          gap: 2vw;
+        }
+        .gp-ab {
+          gap: 2vw;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="app">
+      <header>
+        <label
+          ><button onclick="document.getElementById('rom-file').click()">Load ROM</button></label
+        >
+        <input type="file" id="rom-file" accept=".gb,.gbc" hidden />
+        <span id="rom-name">No ROM</span>
+        <button id="download-save">Download Save</button>
+        <label
+          ><button onclick="document.getElementById('load-save').click()">Load Save</button></label
+        >
+        <input type="file" id="load-save" accept=".sav" hidden />
+      </header>
+
+      <div id="col-left">
+        <canvas id="screen" width="160" height="144"></canvas>
+        <div id="playback">
+          <button id="btn-play">Play</button>
+          <button id="btn-pause">Pause</button>
+          <button id="btn-step-frame">Frame</button>
+          <button id="btn-step-instr">Step</button>
+          <select id="speed-select">
+            <option value="0.5">0.5x</option>
+            <option value="1" selected>1x</option>
+            <option value="2">2x</option>
+            <option value="4">4x</option>
+          </select>
+          <button id="btn-audio" title="Toggle audio">🔇</button>
+          <span id="frame-info">Frame 0</span>
+        </div>
+      </div>
+
+      <div id="col-right">
+        <!-- Buttons: spans both columns so the gamepad has room -->
+        <div class="panel panel-full" id="panel-controls">
+          <div class="panel-head" onclick="this.parentElement.classList.toggle('shut')">
+            Buttons
+          </div>
+          <div class="panel-body">
+            <div id="gamepad">
+              <div class="gp-dpad">
+                <button class="gp-btn" data-btn="6"></button>
+                <button class="gp-btn" data-btn="5"></button>
+                <button class="gp-btn" data-btn="7"></button>
+                <button class="gp-btn" data-btn="4"></button>
+              </div>
+              <div class="gp-meta">
+                <button class="gp-btn gp-small" data-btn="2">SEL</button>
+                <button class="gp-btn gp-small" data-btn="3">STA</button>
+              </div>
+              <div class="gp-ab">
+                <button class="gp-btn gp-round" data-btn="1">B</button>
+                <button class="gp-btn gp-round" data-btn="0">A</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Left sub-column: execution view (CPU state + code + data) -->
+        <div class="panel-group">
+          <div class="panel" id="panel-cpu">
+            <div class="panel-head" onclick="this.parentElement.classList.toggle('shut')">CPU</div>
+            <div class="panel-body">
+              <div class="reg-tbl">
+                <div class="row">
+                  <span class="lbl">AF</span><span class="val" id="r-af">0000</span>
+                  <span class="lbl">BC</span><span class="val" id="r-bc">0000</span>
+                  <span class="lbl">DE</span><span class="val" id="r-de">0000</span>
+                  <span class="lbl">HL</span><span class="val" id="r-hl">0000</span>
+                </div>
+                <div class="row">
+                  <span class="lbl">SP</span><span class="val" id="r-sp">0000</span>
+                  <span class="lbl">PC</span><span class="val" id="r-pc">0000</span>
+                  <span class="lbl">IME</span><span class="val" id="r-ime">0</span>
+                  <span class="lbl">HLT</span><span class="val" id="r-halt">0</span>
+                </div>
+                <div class="row">
+                  <span class="lbl">Flags</span><span class="val" id="r-flags">----</span>
+                  <span class="lbl"></span><span class="val"></span> <span class="lbl"></span
+                  ><span class="val"></span> <span class="lbl"></span><span class="val"></span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="panel" id="panel-disasm">
+            <div class="panel-head" onclick="this.parentElement.classList.toggle('shut')">
+              Disassembly
+            </div>
+            <div class="panel-body"><pre id="disasm-pre"></pre></div>
+          </div>
+
+          <div class="panel" id="panel-memory">
+            <div class="panel-head" onclick="this.parentElement.classList.toggle('shut')">
+              Memory
+            </div>
+            <div class="panel-body">
+              <div id="mem-nav">
+                <input type="text" id="mem-addr-input" value="0000" maxlength="4" />
+                <button id="mem-goto">Go</button>
+                <button id="mem-prev-page">&lt;&lt;</button>
+                <button id="mem-prev">&lt;</button>
+                <button id="mem-next">&gt;</button>
+                <button id="mem-next-page">&gt;&gt;</button>
+              </div>
+              <pre id="mem-pre"></pre>
+            </div>
+          </div>
+        </div>
+
+        <!-- Right sub-column: graphics / system view -->
+        <div class="panel-group">
+          <div class="panel" id="panel-ppu">
+            <div class="panel-head" onclick="this.parentElement.classList.toggle('shut')">
+              PPU
+              <span id="cgb-badge" style="display: none; margin-left: 6px; opacity: 0.5"
+                >[GBC]</span
+              >
+            </div>
+            <div class="panel-body">
+              <div class="reg-tbl">
+                <div class="row">
+                  <span class="lbl">LY</span><span class="val" id="r-ly">000</span>
+                  <span class="lbl">Mode</span><span class="val" id="r-mode">0</span>
+                  <span class="lbl">LCDC</span><span class="val" id="r-lcdc">00</span>
+                  <span class="lbl">STAT</span><span class="val" id="r-stat">00</span>
+                </div>
+                <div class="row">
+                  <span class="lbl">SCX</span><span class="val" id="r-scx">00</span>
+                  <span class="lbl">SCY</span><span class="val" id="r-scy">00</span>
+                  <span class="lbl">WX</span><span class="val" id="r-wx">00</span>
+                  <span class="lbl">WY</span><span class="val" id="r-wy">00</span>
+                </div>
+                <!-- DMG palette registers (hidden in GBC mode) -->
+                <div class="row" id="row-dmg-pal">
+                  <span class="lbl">BGP</span><span class="val" id="r-bgp">00</span>
+                  <span class="lbl">OBP0</span><span class="val" id="r-obp0">00</span>
+                  <span class="lbl">OBP1</span><span class="val" id="r-obp1">00</span>
+                  <span class="lbl"></span><span class="val"></span>
+                </div>
+                <!-- GBC banking/speed registers (shown in GBC mode) -->
+                <div class="row" id="row-cgb-regs" style="display: none">
+                  <span class="lbl">VBK</span><span class="val" id="r-vbk">0</span>
+                  <span class="lbl">SVBK</span><span class="val" id="r-svbk">1</span>
+                  <span class="lbl">KEY1</span><span class="val" id="r-key1">00</span>
+                  <span class="lbl">OPRI</span><span class="val" id="r-opri">00</span>
+                </div>
+                <!-- GBC palette index registers -->
+                <div class="row" id="row-cgb-pal-idx" style="display: none">
+                  <span class="lbl">BCPS</span><span class="val" id="r-bcps">00</span>
+                  <span class="lbl">OCPS</span><span class="val" id="r-ocps">00</span>
+                  <span class="lbl">HDMA5</span><span class="val" id="r-hdma5">idle</span>
+                  <span class="lbl"></span><span class="val"></span>
+                </div>
+              </div>
+              <!-- GBC colour palettes (shown in GBC mode) -->
+              <div id="cgb-palettes" style="display: none; margin-top: 6px">
+                <div class="sub" style="margin-top: 0">BG Palettes</div>
+                <canvas
+                  id="cgb-bg-pal"
+                  width="32"
+                  height="1"
+                  style="
+                    width: 256px;
+                    height: 12px;
+                    image-rendering: pixelated;
+                    border: 1px solid var(--border);
+                  "
+                ></canvas>
+                <div class="sub">OBJ Palettes</div>
+                <canvas
+                  id="cgb-obj-pal"
+                  width="32"
+                  height="1"
+                  style="
+                    width: 256px;
+                    height: 12px;
+                    image-rendering: pixelated;
+                    border: 1px solid var(--border);
+                  "
+                ></canvas>
+              </div>
+            </div>
+          </div>
+
+          <div class="panel shut" id="panel-io">
+            <div class="panel-head" onclick="this.parentElement.classList.toggle('shut')">IO</div>
+            <div class="panel-body">
+              <div class="sub">Timer</div>
+              <div class="reg-tbl">
+                <div class="row">
+                  <span class="lbl">DIV</span><span class="val" id="r-div">00</span>
+                  <span class="lbl">TIMA</span><span class="val" id="r-tima">00</span>
+                  <span class="lbl">TMA</span><span class="val" id="r-tma">00</span>
+                  <span class="lbl">TAC</span><span class="val" id="r-tac">00</span>
+                </div>
+              </div>
+              <div class="sub">Interrupts</div>
+              <div class="reg-tbl">
+                <div class="row">
+                  <span class="lbl">IE</span><span class="val" id="r-ie">00</span>
+                  <span class="lbl">IF</span><span class="val" id="r-if">00</span>
+                  <span class="lbl">VBL</span><span class="val" id="r-int-vbl">-</span>
+                  <span class="lbl">LCD</span><span class="val" id="r-int-lcd">-</span>
+                </div>
+                <div class="row">
+                  <span class="lbl">TIM</span><span class="val" id="r-int-tim">-</span>
+                  <span class="lbl">SER</span><span class="val" id="r-int-ser">-</span>
+                  <span class="lbl">JOY</span><span class="val" id="r-int-joy">-</span>
+                  <span class="lbl"></span><span class="val"></span>
+                </div>
+              </div>
+              <div class="sub">Serial</div>
+              <pre id="serial-output"></pre>
+            </div>
+          </div>
+
+          <div class="panel shut" id="panel-apu">
+            <div class="panel-head" onclick="this.parentElement.classList.toggle('shut')">APU</div>
+            <div class="panel-body">
+              <div id="apu-status-bar">
+                <span id="apu-pwr" class="off">○ PWR</span>
+                <span>NR50 <span id="apu-nr50" class="av">77</span></span>
+                <span>NR51 <span id="apu-nr51" class="av">F3</span></span>
+                <span>NR52 <span id="apu-nr52" class="av">F1</span></span>
+                <span>SEQ <span id="apu-seq" class="av">0</span></span>
+                <span>L <span id="apu-vol-l" class="av">8</span>/8</span>
+                <span>R <span id="apu-vol-r" class="av">8</span>/8</span>
+              </div>
+              <div id="apu-channels">
+                <div class="apu-ch c1">
+                  <div class="apu-ch-head">PU1</div>
+                  <canvas class="apu-scope" id="apu-scope-1" width="256" height="48"></canvas>
+                  <div class="apu-ch-note dim" id="apu-c1-note">---</div>
+                  <div class="apu-ch-rows" id="apu-c1-rows"></div>
+                </div>
+                <div class="apu-ch c2">
+                  <div class="apu-ch-head">PU2</div>
+                  <canvas class="apu-scope" id="apu-scope-2" width="256" height="48"></canvas>
+                  <div class="apu-ch-note dim" id="apu-c2-note">---</div>
+                  <div class="apu-ch-rows" id="apu-c2-rows"></div>
+                </div>
+                <div class="apu-ch c3">
+                  <div class="apu-ch-head">WAV</div>
+                  <canvas class="apu-scope" id="apu-scope-3" width="256" height="48"></canvas>
+                  <div class="apu-ch-note dim" id="apu-c3-note">---</div>
+                  <div class="apu-ch-rows" id="apu-c3-rows"></div>
+                </div>
+                <div class="apu-ch c4">
+                  <div class="apu-ch-head">NOI</div>
+                  <canvas class="apu-scope" id="apu-scope-4" width="256" height="48"></canvas>
+                  <div class="apu-ch-note dim" id="apu-c4-note">---</div>
+                  <div class="apu-ch-rows" id="apu-c4-rows"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="panel shut" id="panel-tiles">
+            <div class="panel-head" onclick="this.parentElement.classList.toggle('shut')">
+              VRAM
+              <span id="cgb-badge-vram" style="display: none; margin-left: 6px; opacity: 0.5"
+                >[GBC]</span
+              >
+            </div>
+            <div class="panel-body">
+              <div class="vram-sections">
+                <div class="vram-section">
+                  <div class="sub">Tile Data</div>
+                  <div id="tile-bank-select" style="display: none">
+                    <button id="btn-tile-bank0" class="active-bank">BK 0</button>
+                    <button id="btn-tile-bank1">BK 1</button>
+                  </div>
+                  <canvas id="tile-canvas" width="128" height="192"></canvas>
+                </div>
+                <div class="vram-section">
+                  <div class="sub">Background Map</div>
+                  <canvas id="bg-map-canvas" width="256" height="256"></canvas>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="panel" id="panel-camera">
+            <div class="panel-head" onclick="this.parentElement.classList.toggle('shut')">
+              Camera
+            </div>
+            <div class="panel-body">
+              <div id="camera-status"></div>
+              <div id="camera-settings"></div>
+              <div class="cam-row">
+                <div>
+                  <small>Sensor</small><canvas id="live-capture" width="128" height="112"></canvas>
+                </div>
+                <div>
+                  <small>Webcam</small
+                  ><canvas id="webcam-preview" width="128" height="112"></canvas>
+                </div>
+              </div>
+              <button id="btn-webcam-toggle">Enable Webcam</button>
+              <span id="webcam-status"></span>
+              <div id="gallery-grid"></div>
+            </div>
+          </div>
+
+          <div class="panel" id="panel-motion">
+            <div class="panel-head" onclick="this.parentElement.classList.toggle('shut')">
+              Accelerometer
+            </div>
+            <div class="panel-body">
+              <div id="motion-status">Accelerometer disabled</div>
+              <div id="tilt-indicator"><div id="tilt-dot"></div></div>
+              <button id="btn-motion-toggle">Enable Accelerometer</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script type="module" src="debug-bundle.js"></script>
+  </body>
+</html>

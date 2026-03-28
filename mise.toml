@@ -1,0 +1,25 @@
+[tools]
+node = "20"
+
+[tasks.install]
+description = "Install npm dependencies"
+run = "npm install"
+
+[tasks.build]
+description = "Build the debug frontend"
+run = "node esbuild.config.js"
+depends = ["install"]
+
+[tasks.dev]
+description = "Build and serve locally"
+run = "npx serve dist"
+depends = ["build"]
+
+[tasks.fmt]
+description = "Format source files with Prettier"
+run = "npx prettier --write 'src/**/*.js' index.html"
+depends = ["install"]
+
+[tasks.clean]
+description = "Remove build output and node_modules so the next build fetches fresh npm packages"
+run = "rm -rf dist node_modules package-lock.json"

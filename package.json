@@ -1,0 +1,19 @@
+{
+  "name": "gb-debug",
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "build": "node esbuild.config.js",
+    "dev": "npm run build && npx serve dist",
+    "serve": "npx serve dist",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@orkosinha/gb-emu": "latest"
+  },
+  "devDependencies": {
+    "esbuild": "^0.27.2",
+    "prettier": "^3.5.3",
+    "serve": "^14.2.0"
+  }
+}
