@@ -1,19 +1,18 @@
-const BUTTONS = {
-  z: 0,
-  Z: 0, // A
-  x: 1,
-  X: 1, // B
-  Shift: 2, // Select
-  Enter: 3, // Start
-  ArrowRight: 4,
-  ArrowLeft: 5,
-  ArrowUp: 6,
-  ArrowDown: 7,
-};
-
 const NAMES = ['a', 'b', 'select', 'start', 'right', 'left', 'up', 'down'];
 
-export function createInput(state, buttonState) {
+export function createInput(state, buttonState, Button) {
+  const BUTTONS = {
+    z: Button.A,
+    Z: Button.A,
+    x: Button.B,
+    X: Button.B,
+    Shift: Button.Select,
+    Enter: Button.Start,
+    ArrowRight: Button.Right,
+    ArrowLeft: Button.Left,
+    ArrowUp: Button.Up,
+    ArrowDown: Button.Down,
+  };
   const activeTouches = new Map();
 
   function getButtonElement(btn) {

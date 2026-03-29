@@ -1,4 +1,4 @@
-import init, { GameBoy } from './pkg/gb_emu.js';
+import init, { GameBoy, Button } from './pkg/gb_emu.js';
 import { createRenderer } from './renderer.js';
 import { createPanels } from './panels.js';
 import { createInput } from './input.js';
@@ -37,7 +37,7 @@ async function main() {
     memPre: $('mem-pre'),
     serialPre: $('serial-output'),
   });
-  const input = createInput(state, buttonState);
+  const input = createInput(state, buttonState, Button);
   const camera = createCamera(state, {
     cameraStatus: $('camera-status'),
     cameraSettings: $('camera-settings'),

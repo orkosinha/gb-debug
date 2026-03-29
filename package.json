@@ -9,7 +9,7 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@orkosinha/gb-emu": "latest"
+    "@orkosinha/gb-emu-devtools": "latest"
   },
   "devDependencies": {
     "esbuild": "^0.27.2",

@@ -7,7 +7,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const distDir    = path.join(__dirname, "dist");
 const distPkgDir = path.join(distDir, "pkg");
-const pkgDir     = path.join(__dirname, "node_modules", "@orkosinha", "gb-emu");
+const pkgDir     = path.join(__dirname, "node_modules", "@orkosinha", "gb-emu-devtools");
 
 if (!fs.existsSync(distDir))    fs.mkdirSync(distDir,    { recursive: true });
 if (!fs.existsSync(distPkgDir)) fs.mkdirSync(distPkgDir, { recursive: true });
